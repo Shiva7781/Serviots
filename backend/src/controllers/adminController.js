@@ -3,6 +3,7 @@ const Space = require('../models/Space');
 const ApiError = require('../utils/ApiError');
 const { validateBookingWindow, buildSlotList, rangesOverlap } = require('../utils/slots');
 const { claimSlots, releaseSlots } = require('./bookingController');
+const { notifyBookingStatusChange } = require('../services/notificationService');
 
 async function listBookings(req, res) {
   const page = Number(req.query.page) || 1;
@@ -35,6 +36,7 @@ async function approve(req, res) {
   booking.status = 'approved';
   booking.createdBy = req.user.id;
   await booking.save();
+  await notifyBookingStatusChange(booking, 'pending');
 
   // Defensive net: slot creation already blocks overlapping pending bookings,
   // so this should normally match nothing - kept to guarantee the invariant.
@@ -53,6 +55,7 @@ async function approve(req, res) {
       other.reason = 'Auto-rejected: overlapping slot was approved for another booking';
       await other.save();
       await releaseSlots(other._id);
+      await notifyBookingStatusChange(other, 'pending');
       autoRejected.push(other._id);
     }
   }
@@ -72,6 +75,7 @@ async function reject(req, res) {
   booking.createdBy = req.user.id;
   await booking.save();
   await releaseSlots(booking._id);
+  await notifyBookingStatusChange(booking, 'pending');
 
   res.json({ booking });
 }

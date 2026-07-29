@@ -3,6 +3,7 @@ const SlotReservation = require('../models/SlotReservation');
 const Space = require('../models/Space');
 const ApiError = require('../utils/ApiError');
 const { validateBookingWindow, buildSlotList } = require('../utils/slots');
+const { notifyBookingStatusChange } = require('../services/notificationService');
 
 // Relies on the unique {space,date,slot} index on SlotReservation as the
 // concurrency guard: only one of two racing insertMany calls can win a given
@@ -88,9 +89,11 @@ async function cancel(req, res) {
     throw ApiError.badRequest('Cannot cancel a booking that has already started/passed');
   }
 
+  const previousStatus = booking.status;
   booking.status = 'cancelled';
   await booking.save();
   await releaseSlots(booking._id);
+  await notifyBookingStatusChange(booking, previousStatus);
 
   res.json({ booking });
 }

@@ -8,9 +8,8 @@ member, and managing spaces/bookings as an admin.
 - **Frontend:** React (Vite), React Router, Axios.
 - **Database:** MongoDB, local instance at `mongodb://localhost:27017/Serviots`.
 
-> This README currently covers the **mandatory** scope only (core backend,
-> frontend, auth, concurrency-safe booking, validation, rate limiting,
-> indexes). Bonus items (Docker, email stub, deployed link, Swagger) are not
+> This README covers the **mandatory** scope plus the email/notification
+> bonus item. Remaining bonus items (Docker, deployed link, Swagger) are not
 > included yet.
 
 ---
@@ -148,11 +147,23 @@ first place), but it keeps the invariant true even if that ever changes.
 `POST /api/auth/login` and `POST /api/auth/register` are limited to 10
 requests per 15 minutes per IP via `express-rate-limit`.
 
+### Email notifications on booking status change
+
+`src/services/notificationService.js` sends the member an email whenever
+their booking's status changes (approved, rejected — including auto-rejected,
+and cancelled). It goes through `src/utils/mailer.js`, which is a stub by
+default: with no `SMTP_*` env vars set, it just logs the email to the
+console instead of sending it, so the whole flow works out of the box with
+no email provider set up. Set `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` /
+`SMTP_PASS` (e.g. Gmail SMTP, Brevo, Mailgun — any standard SMTP provider) in
+`.env` to send real email with no code changes. A send failure is caught and
+logged, never thrown — a broken mail provider can't break the booking flow.
+
 ### Indexes
 
 - `User.email` — unique.
-- `Space`: text index on `name`, plus indexes on `type`, `capacity`,
-  `isActive` for filtering.
+- `Space`: indexes on `name`, `type`, `capacity`, `isActive` for
+  search/filtering.
 - `Booking`: indexes on `space`, `user`, `type`, `date`, `status`, and
   compound indexes `{space,date,status}` / `{user,status}` / `{date,status}`
   for the common list/filter queries.
@@ -626,6 +637,5 @@ a `baseUrl` variable and login requests that auto-capture `memberToken` /
 ## What's not included yet (optional/bonus — pending your go-ahead)
 
 - Docker / `docker-compose.yml`
-- Email/notification stub on booking status change
 - Deployed link
 - Swagger (Postman collection is included above)
