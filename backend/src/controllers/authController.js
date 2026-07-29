@@ -11,13 +11,23 @@ const {
 const REFRESH_COOKIE = 'refreshToken';
 
 function refreshCookieOptions() {
+  const isProd = process.env.NODE_ENV === 'production';
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: isProd,
+    // Frontend and backend are on different domains in production (Vercel /
+    // Render), so the cookie must be sent cross-site - that requires
+    // SameSite=None, which browsers only honor when Secure is also true.
+    sameSite: isProd ? 'none' : 'lax',
     path: '/api/auth',
     expires: refreshExpiryDate(),
   };
+}
+
+function clearRefreshCookie(res) {
+  const opts = refreshCookieOptions();
+  delete opts.expires;
+  res.clearCookie(REFRESH_COOKIE, opts);
 }
 
 async function issueTokenPair(res, user) {
@@ -64,7 +74,7 @@ async function refresh(req, res) {
       // Reuse of a revoked/expired token - revoke the whole chain for safety.
       await RefreshToken.updateMany({ user: stored.user, revoked: false }, { revoked: true });
     }
-    res.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+    clearRefreshCookie(res);
     throw ApiError.unauthorized('Invalid or expired refresh token');
   }
 
@@ -92,7 +102,7 @@ async function logout(req, res) {
   if (token) {
     await RefreshToken.updateOne({ tokenHash: hashToken(token) }, { revoked: true });
   }
-  res.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+  clearRefreshCookie(res);
   res.status(204).send();
 }
 
