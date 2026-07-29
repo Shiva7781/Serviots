@@ -1,0 +1,631 @@
+# Serviots — Co-working Space Desk & Room Booking System
+
+A full-stack app for browsing desks/meeting rooms, booking time slots as a
+member, and managing spaces/bookings as an admin.
+
+- **Backend:** Node.js, Express, MongoDB (Mongoose), JWT auth with refresh
+  tokens, `express-rate-limit`, `express-validator`.
+- **Frontend:** React (Vite), React Router, Axios.
+- **Database:** MongoDB, local instance at `mongodb://localhost:27017/Serviots`.
+
+> This README currently covers the **mandatory** scope only (core backend,
+> frontend, auth, concurrency-safe booking, validation, rate limiting,
+> indexes). Bonus items (Docker, email stub, deployed link, Swagger) are not
+> included yet.
+
+---
+
+## Project structure
+
+```
+Serviots/
+  backend/     Express API (src/models, controllers, routes, middleware, ...)
+  frontend/    React app (src/pages, components, context, api)
+```
+
+## Prerequisites
+
+- Node.js 18+
+- A running local MongoDB at `mongodb://localhost:27017/` (no auth) — the app
+  uses the `Serviots` database.
+
+## 1. Backend setup
+
+```bash
+cd backend
+cp .env.example .env      # already created for local dev; edit if needed
+npm install
+npm run seed               # creates an admin user, a member user, and sample spaces
+npm run dev                 # starts the API on http://localhost:5000
+```
+
+Seeded accounts:
+
+| Role   | Email                  | Password    |
+|--------|-------------------------|-------------|
+| Admin  | admin@serviots.com      | Admin@123   |
+| Member | member@serviots.com     | Member@123  |
+
+### Backend environment variables (`backend/.env.example`)
+
+```
+NODE_ENV=development
+PORT=5000
+MONGO_URI=mongodb://localhost:27017/Serviots
+JWT_ACCESS_SECRET=...
+JWT_REFRESH_SECRET=...
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+CLIENT_ORIGIN=http://localhost:5173
+SLOT_MINUTES=30
+OPEN_TIME=08:00
+CLOSE_TIME=20:00
+```
+
+## 2. Frontend setup
+
+```bash
+cd frontend
+cp .env.example .env       # VITE_API_URL=http://localhost:5000/api
+npm install
+npm run dev                 # starts the app on http://localhost:5173
+```
+
+Open http://localhost:5173.
+
+---
+
+## How the pieces fit together
+
+### Auth & roles
+
+- Register/login issue a short-lived **access token** (JWT, 15m default) in
+  the response body, and set an httpOnly, path-scoped **refresh token**
+  cookie (opaque random token, 7d default, hashed with SHA-256 before being
+  stored in Mongo).
+- `POST /api/auth/refresh` reads the cookie, validates + **rotates** the
+  refresh token (old one is revoked, a new one issued), and returns a new
+  access token. Reuse of an already-revoked token revokes the whole chain for
+  that user (basic refresh-token-theft mitigation).
+- The frontend keeps the access token in memory only (never in
+  localStorage) and silently calls `/auth/refresh` on load and whenever a
+  request gets a 401, via an Axios response interceptor.
+- Public registration always creates a `member`. There is no self-serve way
+  to become an `admin` — the seed script creates the admin account (a real
+  deployment would provision admins out-of-band).
+- Role-based authorization is enforced with `authenticate()` +
+  `authorize('member'|'admin')` middleware on every protected route.
+
+### Concurrency-safe booking (the core requirement)
+
+MongoDB here runs as a **standalone instance** (not a replica set), so
+multi-document ACID transactions aren't available. Instead of relying on
+transactions, the safety comes from a genuine DB-level constraint:
+
+- `SlotReservation` has a **unique compound index** on `{ space, date, slot }`,
+  where `slot` is one discrete `HH:MM` unit (`SLOT_MINUTES`, default 30).
+- Creating a booking (or an admin maintenance block) inserts one
+  `SlotReservation` document per slot it covers, via `insertMany(..., {
+  ordered: true })`.
+- If two requests race for an overlapping slot, MongoDB's unique index
+  guarantees only one insert can win that document — the other fails with an
+  `E11000` duplicate-key error.
+- On any failure, the app deletes whatever slot documents *that* request
+  managed to insert plus the `Booking` doc it just created (compensating
+  rollback), and returns `409 Conflict`. No partial state survives.
+
+This was verified by firing 8 concurrent requests at the same space/slot
+(`curl ... &` × 8, `wait`) — exactly 1 succeeded (`201`), 7 got `409`, and the
+DB was left with exactly one `Booking` + its slot rows (no orphans).
+
+Both `pending` and `approved` bookings reserve slots (matching "cannot book a
+slot that overlaps an existing approved/pending booking"); `rejected` /
+`cancelled` bookings release their slots immediately. Admin maintenance
+blocks use the same slot table, so a booking can never be created over a
+maintenance window (and vice versa).
+
+The admin "approve" action also runs a defensive query that auto-rejects any
+other *pending* booking on the same space/date whose time range overlaps the
+one just approved. Under normal operation this finds nothing (the slot index
+already prevents overlapping pending bookings from being created in the
+first place), but it keeps the invariant true even if that ever changes.
+
+### Validation & errors
+
+- Every write endpoint validates its body/query with `express-validator`
+  (`src/validators/*`) before touching the DB — malformed input, wrong enum
+  values, invalid IDs, etc. never reach a controller.
+- Booking-window validation additionally rejects: dates not in
+  `YYYY-MM-DD` format, times not aligned to the slot granularity, `end <=
+  start`, and any start time in the past.
+- A single centralized error handler (`middleware/errorHandler.js`) turns
+  everything (validation errors, Mongoose `CastError`/`ValidationError`,
+  duplicate-key errors, thrown `ApiError`s) into one consistent shape:
+  `{ "error": { "message", "status", "details"? } }`.
+
+### Rate limiting
+
+`POST /api/auth/login` and `POST /api/auth/register` are limited to 10
+requests per 15 minutes per IP via `express-rate-limit`.
+
+### Indexes
+
+- `User.email` — unique.
+- `Space`: text index on `name`, plus indexes on `type`, `capacity`,
+  `isActive` for filtering.
+- `Booking`: indexes on `space`, `user`, `type`, `date`, `status`, and
+  compound indexes `{space,date,status}` / `{user,status}` / `{date,status}`
+  for the common list/filter queries.
+- `SlotReservation`: unique compound index `{space,date,slot}` (the
+  concurrency constraint described above).
+- `RefreshToken`: unique `tokenHash`, and a TTL index on `expiresAt` so
+  expired tokens are auto-purged by MongoDB.
+
+---
+
+## API overview
+
+All responses are JSON; errors follow `{ error: { message, status, details? } }`.
+
+### Auth — `/api/auth`
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| POST | `/register` | – | rate-limited, creates a `member` |
+| POST | `/login` | – | rate-limited |
+| POST | `/refresh` | refresh cookie | rotates refresh token |
+| POST | `/logout` | – | revokes + clears refresh cookie |
+| GET | `/me` | access token | current user |
+
+### Spaces — `/api/spaces`
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/` | – | `search`, `type`, `minCapacity`, `date`, `page`, `limit` |
+| GET | `/:id` | – | space details |
+| GET | `/:id/availability?date=YYYY-MM-DD` | – | full-day slot grid |
+| POST | `/` | admin | create space |
+| PATCH | `/:id` | admin | edit space |
+| DELETE | `/:id` | admin | delete space (+ its bookings) |
+
+### Bookings — `/api/bookings` (member)
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/` | create booking (concurrency-safe) |
+| GET | `/mine` | own bookings, filter by `status`, paginated |
+| PATCH | `/:id/cancel` | cancel own pending/approved future booking |
+
+### Admin — `/api/admin` (admin)
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/spaces` | includes inactive spaces |
+| GET | `/bookings` | filter by `status`, `date`, `space` |
+| PATCH | `/bookings/:id/approve` | approves + auto-rejects overlapping pendings |
+| PATCH | `/bookings/:id/reject` | optional `reason` |
+| POST | `/maintenance` | block out a space/date/time range |
+| GET | `/maintenance` | list blocks |
+| DELETE | `/maintenance/:id` | remove a block |
+
+---
+
+## Postman collection
+
+Copy the JSON block below into a file named `serviots.postman_collection.json`
+and import it into Postman (**Import → Raw text/File**). It's pre-wired with
+a `baseUrl` variable and login requests that auto-capture `memberToken` /
+`adminToken` into collection variables, so once you run **Auth → Login
+(Member)** and **Auth → Login (Admin)** every other request just works.
+
+- `Create Space`, `Create Booking`, and `Create Maintenance Block` auto-save
+  their new `spaceId` / `bookingId` / `maintenanceId` for use by later requests.
+- `Refresh Token` relies on Postman's cookie jar holding the httpOnly
+  `refreshToken` cookie set by the login requests (cookies are on by default
+  for `localhost` in the Postman app).
+- The `Spaces (Admin CRUD)` folder is self-contained (create → update →
+  delete the same space it just created) — run it on its own rather than as
+  part of one long top-to-bottom pass, since its `Delete Space` step would
+  otherwise remove the space that `Bookings` / `Admin` requests further down
+  are pointed at via `{{spaceId}}`.
+
+```json
+{
+  "info": {
+    "name": "Serviots - Co-working Space Booking API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "8f2e6b3a-2c3a-4b6a-9b2e-serviots-booking-api"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "memberToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "spaceId", "value": "" },
+    { "key": "bookingId", "value": "" },
+    { "key": "maintenanceId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register (Member)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Member\",\n  \"email\": \"member2@serviots.com\",\n  \"password\": \"Member@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Login (Member)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.accessToken) pm.collectionVariables.set('memberToken', json.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"member@serviots.com\",\n  \"password\": \"Member@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.accessToken) pm.collectionVariables.set('adminToken', json.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@serviots.com\",\n  \"password\": \"Admin@123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.accessToken) pm.collectionVariables.set('memberToken', json.accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "description": "Requires Postman's cookie jar to hold the httpOnly refreshToken cookie set by Login - enable 'Automatically follow redirects' and allow cookies for localhost."
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{memberToken}}" }],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Spaces (Visitor)",
+      "item": [
+        {
+          "name": "List Spaces",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/spaces?page=1&limit=10&search=&type=&minCapacity=&date=",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "type", "value": "", "disabled": true, "description": "desk | meeting_room" },
+                { "key": "minCapacity", "value": "", "disabled": true },
+                { "key": "date", "value": "", "disabled": true, "description": "YYYY-MM-DD" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Space by ID",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/spaces/{{spaceId}}", "host": ["{{baseUrl}}"], "path": ["spaces", "{{spaceId}}"] }
+          }
+        },
+        {
+          "name": "Get Space Availability",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/spaces/{{spaceId}}/availability?date=2026-09-01",
+              "host": ["{{baseUrl}}"],
+              "path": ["spaces", "{{spaceId}}", "availability"],
+              "query": [{ "key": "date", "value": "2026-09-01" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Spaces (Admin CRUD)",
+      "item": [
+        {
+          "name": "Create Space",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.space) pm.collectionVariables.set('spaceId', json.space._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Test Room\",\n  \"type\": \"meeting_room\",\n  \"capacity\": 6,\n  \"amenities\": [\"whiteboard\", \"TV screen\"],\n  \"description\": \"Created from Postman\",\n  \"location\": \"Floor 5\",\n  \"pricePerHour\": 30\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/spaces", "host": ["{{baseUrl}}"], "path": ["spaces"] }
+          }
+        },
+        {
+          "name": "Update Space",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capacity\": 8,\n  \"pricePerHour\": 35\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/spaces/{{spaceId}}", "host": ["{{baseUrl}}"], "path": ["spaces", "{{spaceId}}"] }
+          }
+        },
+        {
+          "name": "Delete Space",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/spaces/{{spaceId}}", "host": ["{{baseUrl}}"], "path": ["spaces", "{{spaceId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bookings (Member)",
+      "item": [
+        {
+          "name": "Create Booking",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.booking) pm.collectionVariables.set('bookingId', json.booking._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{memberToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"space\": \"{{spaceId}}\",\n  \"date\": \"2026-09-01\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"11:00\",\n  \"purpose\": \"Client call\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/bookings", "host": ["{{baseUrl}}"], "path": ["bookings"] }
+          }
+        },
+        {
+          "name": "My Bookings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{memberToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/mine?page=1&limit=10&status=",
+              "host": ["{{baseUrl}}"],
+              "path": ["bookings", "mine"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "status", "value": "", "disabled": true, "description": "pending | approved | rejected | cancelled" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cancel Booking",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{memberToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/bookings/{{bookingId}}/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["bookings", "{{bookingId}}", "cancel"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "List All Spaces (incl. inactive)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/spaces?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["admin", "spaces"] }
+          }
+        },
+        {
+          "name": "List All Bookings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/bookings?page=1&limit=10&status=pending&date=&space=",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "bookings"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "status", "value": "pending" },
+                { "key": "date", "value": "", "disabled": true },
+                { "key": "space", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve Booking",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/bookings/{{bookingId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "bookings", "{{bookingId}}", "approve"]
+            }
+          }
+        },
+        {
+          "name": "Reject Booking",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Space needed for maintenance\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/bookings/{{bookingId}}/reject",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "bookings", "{{bookingId}}", "reject"]
+            }
+          }
+        },
+        {
+          "name": "Create Maintenance Block",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.maintenance) pm.collectionVariables.set('maintenanceId', json.maintenance._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"space\": \"{{spaceId}}\",\n  \"date\": \"2026-09-02\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"10:00\",\n  \"reason\": \"Deep cleaning\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/admin/maintenance", "host": ["{{baseUrl}}"], "path": ["admin", "maintenance"] }
+          }
+        },
+        {
+          "name": "List Maintenance Blocks",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{baseUrl}}/admin/maintenance", "host": ["{{baseUrl}}"], "path": ["admin", "maintenance"] }
+          }
+        },
+        {
+          "name": "Delete Maintenance Block",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/maintenance/{{maintenanceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "maintenance", "{{maintenanceId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## Manual verification performed
+
+- Full golden path exercised in a real browser (Chromium via Playwright):
+  visitor listing → search/filter → space detail + calendar → member login →
+  slot selection → booking → My Bookings → cancel → admin login → approve a
+  pending booking → space CRUD (add/delete) → maintenance block creation.
+- `curl`-level checks: past-dated booking rejected (400), malformed
+  time rejected (400), `end <= start` rejected (400), missing token (401),
+  member hitting an admin-only route (403), refresh-token rotation (200 with
+  new access token).
+- Concurrency race: 8 simultaneous `POST /api/bookings` for the same
+  space/date/time → exactly 1 `201`, 7 `409`, zero orphaned data.
+
+## What's not included yet (optional/bonus — pending your go-ahead)
+
+- Docker / `docker-compose.yml`
+- Email/notification stub on booking status change
+- Deployed link
+- Swagger (Postman collection is included above)
