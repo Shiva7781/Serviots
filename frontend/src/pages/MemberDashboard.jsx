@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../api/axios';
 import StatusBadge from '../components/StatusBadge';
 import Pagination from '../components/Pagination';
+import Icon from '../components/Icon';
 
 export default function MemberDashboard() {
   const [status, setStatus] = useState('');
@@ -43,7 +44,9 @@ export default function MemberDashboard() {
 
   return (
     <div className="page">
-      <h1>My Bookings</h1>
+      <h1>
+        <Icon name="calendar" size={22} /> My Bookings
+      </h1>
 
       <div className="filters-bar">
         <select value={status} onChange={(e) => { setPage(1); setStatus(e.target.value); }}>
@@ -61,6 +64,9 @@ export default function MemberDashboard() {
 
       {!loading && !error && (
         <>
+          <p className="table-scroll-hint">
+            <Icon name="chevron-right" size={12} /> Scroll sideways to see all columns
+          </p>
           <div className="table-wrap">
             <table>
               <thead>
@@ -94,6 +100,7 @@ export default function MemberDashboard() {
                           disabled={cancellingId === b._id}
                           onClick={() => handleCancel(b._id)}
                         >
+                          <Icon name="x-circle" size={13} />{' '}
                           {cancellingId === b._id ? 'Cancelling…' : 'Cancel'}
                         </button>
                       )}

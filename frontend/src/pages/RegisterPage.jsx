@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Icon from '../components/Icon';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -27,7 +28,9 @@ export default function RegisterPage() {
 
   return (
     <div className="page page-narrow">
-      <h1>Register</h1>
+      <h1>
+        <Icon name="user-plus" size={22} /> Register
+      </h1>
       <form className="form" onSubmit={handleSubmit}>
         <label>
           Name
@@ -49,7 +52,7 @@ export default function RegisterPage() {
         </label>
         {error && <p className="form-error">{error}</p>}
         <button className="btn btn-primary" type="submit" disabled={submitting}>
-          {submitting ? 'Creating account…' : 'Register'}
+          <Icon name="user-plus" size={15} /> {submitting ? 'Creating account…' : 'Register'}
         </button>
       </form>
       <p className="muted">

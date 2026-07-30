@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
 import Pagination from '../components/Pagination';
+import Icon from '../components/Icon';
+import amenityIcon from '../utils/amenityIcon';
 
 const emptyFilters = { search: '', type: '', minCapacity: '', date: '' };
 
@@ -45,16 +47,21 @@ export default function SpacesPage() {
 
   return (
     <div className="page">
-      <h1>Browse Spaces</h1>
+      <h1>
+        <Icon name="grid" size={22} /> Browse Spaces
+      </h1>
       <p className="muted">Find a desk or meeting room and check real-time availability.</p>
 
       <div className="filters-bar">
-        <input
-          type="text"
-          placeholder="Search by name or type…"
-          value={filters.search}
-          onChange={(e) => updateFilter('search', e.target.value)}
-        />
+        <div className="input-icon">
+          <Icon name="search" />
+          <input
+            type="text"
+            placeholder="Search by name or type…"
+            value={filters.search}
+            onChange={(e) => updateFilter('search', e.target.value)}
+          />
+        </div>
         <select value={filters.type} onChange={(e) => updateFilter('type', e.target.value)}>
           <option value="">All types</option>
           <option value="desk">Desk</option>
@@ -75,7 +82,7 @@ export default function SpacesPage() {
         />
         {(filters.search || filters.type || filters.minCapacity || filters.date) && (
           <button className="btn btn-ghost" onClick={() => setFilters(emptyFilters)}>
-            Clear
+            <Icon name="x" size={14} /> Clear
           </button>
         )}
       </div>
@@ -91,14 +98,24 @@ export default function SpacesPage() {
               <Link to={`/spaces/${space._id}`} key={space._id} className="space-card">
                 <div className="space-card-header">
                   <h3>{space.name}</h3>
-                  <span className="chip">{space.type === 'desk' ? 'Desk' : 'Meeting Room'}</span>
+                  <span className="chip">
+                    <Icon name={space.type === 'desk' ? 'desk' : 'users'} size={12} />
+                    {space.type === 'desk' ? 'Desk' : 'Meeting Room'}
+                  </span>
                 </div>
-                <p className="muted">Capacity: {space.capacity}</p>
-                {space.location && <p className="muted">{space.location}</p>}
+                <p className="muted">
+                  <Icon name="users" size={14} /> Capacity: {space.capacity}
+                </p>
+                {space.location && (
+                  <p className="muted">
+                    <Icon name="map-pin" size={14} /> {space.location}
+                  </p>
+                )}
                 {space.amenities?.length > 0 && (
                   <div className="amenities">
                     {space.amenities.slice(0, 4).map((a) => (
                       <span key={a} className="chip chip-outline">
+                        <Icon name={amenityIcon(a)} size={12} />
                         {a}
                       </span>
                     ))}

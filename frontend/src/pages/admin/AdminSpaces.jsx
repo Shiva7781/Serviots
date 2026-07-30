@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/axios';
 import Pagination from '../../components/Pagination';
+import Icon from '../../components/Icon';
 
 const emptyForm = {
   name: '',
@@ -106,7 +107,7 @@ export default function AdminSpaces() {
       <div className="section-header">
         <h2>Spaces</h2>
         <button className="btn btn-primary" onClick={openCreate}>
-          + Add Space
+          <Icon name="plus" size={15} /> Add Space
         </button>
       </div>
 
@@ -115,6 +116,9 @@ export default function AdminSpaces() {
 
       {!loading && !error && (
         <>
+          <p className="table-scroll-hint">
+            <Icon name="chevron-right" size={12} /> Scroll sideways to see all columns
+          </p>
           <div className="table-wrap">
             <table>
               <thead>
@@ -130,15 +134,24 @@ export default function AdminSpaces() {
                 {data.items.map((s) => (
                   <tr key={s._id}>
                     <td>{s.name}</td>
-                    <td>{s.type === 'desk' ? 'Desk' : 'Meeting Room'}</td>
+                    <td>
+                      <Icon name={s.type === 'desk' ? 'desk' : 'users'} size={14} />{' '}
+                      {s.type === 'desk' ? 'Desk' : 'Meeting Room'}
+                    </td>
                     <td>{s.capacity}</td>
-                    <td>{s.isActive ? 'Yes' : 'No'}</td>
+                    <td>
+                      <Icon
+                        name={s.isActive ? 'check' : 'x'}
+                        size={14}
+                        className={s.isActive ? 'text-success' : 'text-muted'}
+                      />
+                    </td>
                     <td className="row-actions">
                       <button className="btn btn-ghost btn-sm" onClick={() => openEdit(s)}>
-                        Edit
+                        <Icon name="pencil" size={13} /> Edit
                       </button>
                       <button className="btn btn-danger btn-sm" onClick={() => handleDelete(s)}>
-                        Delete
+                        <Icon name="trash" size={13} /> Delete
                       </button>
                     </td>
                   </tr>
@@ -228,10 +241,10 @@ export default function AdminSpaces() {
               {formError && <p className="form-error">{formError}</p>}
               <div className="modal-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>
-                  Cancel
+                  <Icon name="x" size={14} /> Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Saving…' : 'Save'}
+                  <Icon name="check" size={14} /> {submitting ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </form>

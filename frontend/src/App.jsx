@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
+import Icon from './components/Icon';
 
 import SpacesPage from './pages/SpacesPage';
 import SpaceDetailPage from './pages/SpaceDetailPage';
@@ -41,7 +42,9 @@ export default function App() {
 function NotFound() {
   return (
     <div className="page">
-      <h1>404</h1>
+      <h1>
+        <Icon name="x-circle" size={22} /> 404
+      </h1>
       <p>Page not found.</p>
     </div>
   );

@@ -3,6 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import AvailabilityCalendar from '../components/AvailabilityCalendar';
+import Icon from '../components/Icon';
+import amenityIcon from '../utils/amenityIcon';
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -66,20 +68,30 @@ export default function SpaceDetailPage() {
   return (
     <div className="page">
       <button className="btn btn-ghost" onClick={() => navigate(-1)}>
-        ← Back
+        <Icon name="arrow-left" size={15} /> Back
       </button>
       <div className="space-detail-header">
         <h1>{space.name}</h1>
-        <span className="chip">{space.type === 'desk' ? 'Desk' : 'Meeting Room'}</span>
+        <span className="chip">
+          <Icon name={space.type === 'desk' ? 'desk' : 'users'} size={12} />
+          {space.type === 'desk' ? 'Desk' : 'Meeting Room'}
+        </span>
       </div>
       <p className="muted">
-        Capacity: {space.capacity} {space.location && `• ${space.location}`}
+        <Icon name="users" size={14} /> Capacity: {space.capacity}
+        {space.location && (
+          <>
+            {' '}
+            · <Icon name="map-pin" size={14} /> {space.location}
+          </>
+        )}
       </p>
       {space.description && <p>{space.description}</p>}
       {space.amenities?.length > 0 && (
         <div className="amenities">
           {space.amenities.map((a) => (
             <span key={a} className="chip chip-outline">
+              <Icon name={amenityIcon(a)} size={12} />
               {a}
             </span>
           ))}
@@ -120,7 +132,7 @@ export default function SpaceDetailPage() {
           {bookError && <p className="form-error">{bookError}</p>}
           {bookSuccess && <p className="form-success">{bookSuccess}</p>}
           <button className="btn btn-primary" type="submit" disabled={submitting || !selection}>
-            {submitting ? 'Booking…' : 'Request Booking'}
+            <Icon name="calendar" size={15} /> {submitting ? 'Booking…' : 'Request Booking'}
           </button>
         </form>
       )}

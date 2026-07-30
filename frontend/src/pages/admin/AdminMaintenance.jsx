@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/axios';
+import Icon from '../../components/Icon';
 
 const emptyForm = { space: '', date: '', startTime: '', endTime: '', reason: '' };
 
@@ -56,7 +57,9 @@ export default function AdminMaintenance() {
   return (
     <div>
       <div className="section-header">
-        <h2>Maintenance Windows</h2>
+        <h2>
+          <Icon name="wrench" size={18} /> Maintenance Windows
+        </h2>
       </div>
 
       <form className="form form-inline" onSubmit={handleSubmit}>
@@ -114,7 +117,7 @@ export default function AdminMaintenance() {
           />
         </label>
         <button className="btn btn-primary" type="submit" disabled={submitting}>
-          {submitting ? 'Adding…' : 'Add Block'}
+          <Icon name="plus" size={15} /> {submitting ? 'Adding…' : 'Add Block'}
         </button>
       </form>
       {formError && <p className="form-error">{formError}</p>}
@@ -123,6 +126,10 @@ export default function AdminMaintenance() {
       {error && <p className="form-error">{error}</p>}
 
       {!loading && !error && (
+        <>
+        <p className="table-scroll-hint">
+          <Icon name="chevron-right" size={12} /> Scroll sideways to see all columns
+        </p>
         <div className="table-wrap">
           <table>
             <thead>
@@ -145,7 +152,7 @@ export default function AdminMaintenance() {
                   <td>{m.reason}</td>
                   <td>
                     <button className="btn btn-danger btn-sm" onClick={() => handleDelete(m._id)}>
-                      Remove
+                      <Icon name="trash" size={13} /> Remove
                     </button>
                   </td>
                 </tr>
@@ -154,6 +161,7 @@ export default function AdminMaintenance() {
           </table>
           {items.length === 0 && <p>No maintenance blocks scheduled.</p>}
         </div>
+        </>
       )}
     </div>
   );

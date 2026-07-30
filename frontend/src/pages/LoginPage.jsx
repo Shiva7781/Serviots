@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Icon from '../components/Icon';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -28,7 +29,9 @@ export default function LoginPage() {
 
   return (
     <div className="page page-narrow">
-      <h1>Login</h1>
+      <h1>
+        <Icon name="log-in" size={22} /> Login
+      </h1>
       <form className="form" onSubmit={handleSubmit}>
         <label>
           Email
@@ -52,7 +55,7 @@ export default function LoginPage() {
         </label>
         {error && <p className="form-error">{error}</p>}
         <button className="btn btn-primary" type="submit" disabled={submitting}>
-          {submitting ? 'Logging in…' : 'Login'}
+          <Icon name="log-in" size={15} /> {submitting ? 'Logging in…' : 'Login'}
         </button>
       </form>
       <p className="muted">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../../api/axios';
 import StatusBadge from '../../components/StatusBadge';
 import Pagination from '../../components/Pagination';
+import Icon from '../../components/Icon';
 
 export default function AdminBookings() {
   const [filters, setFilters] = useState({ status: 'pending', date: '', space: '' });
@@ -80,11 +81,14 @@ export default function AdminBookings() {
           <option value="rejected">Rejected</option>
           <option value="cancelled">Cancelled</option>
         </select>
-        <input
-          type="date"
-          value={filters.date}
-          onChange={(e) => updateFilter('date', e.target.value)}
-        />
+        <div className="input-icon">
+          <Icon name="calendar" />
+          <input
+            type="date"
+            value={filters.date}
+            onChange={(e) => updateFilter('date', e.target.value)}
+          />
+        </div>
       </div>
 
       {loading && <p>Loading…</p>}
@@ -93,6 +97,9 @@ export default function AdminBookings() {
 
       {!loading && !error && (
         <>
+          <p className="table-scroll-hint">
+            <Icon name="chevron-right" size={12} /> Scroll sideways to see all columns
+          </p>
           <div className="table-wrap">
             <table>
               <thead>
@@ -121,14 +128,14 @@ export default function AdminBookings() {
                             disabled={busyId === b._id}
                             onClick={() => handleApprove(b._id)}
                           >
-                            Approve
+                            <Icon name="check" size={13} /> Approve
                           </button>
                           <button
                             className="btn btn-danger btn-sm"
                             disabled={busyId === b._id}
                             onClick={() => openReject(b._id)}
                           >
-                            Reject
+                            <Icon name="x" size={13} /> Reject
                           </button>
                         </>
                       )}
@@ -145,10 +152,10 @@ export default function AdminBookings() {
                             disabled={busyId === b._id}
                             onClick={() => submitReject(b._id)}
                           >
-                            Confirm
+                            <Icon name="check" size={13} /> Confirm
                           </button>
                           <button className="btn btn-ghost btn-sm" onClick={() => setRejectingId(null)}>
-                            Cancel
+                            <Icon name="x" size={13} /> Cancel
                           </button>
                         </div>
                       )}
