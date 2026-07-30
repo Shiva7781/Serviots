@@ -15,10 +15,11 @@ function refreshCookieOptions() {
   return {
     httpOnly: true,
     secure: isProd,
-    // Frontend and backend are on different domains in production (Vercel /
-    // Render), so the cookie must be sent cross-site - that requires
-    // SameSite=None, which browsers only honor when Secure is also true.
-    sameSite: isProd ? 'none' : 'lax',
+    // The frontend proxies /api/* through its own domain (see frontend/vercel.json)
+    // rather than calling Render directly, so this cookie is always same-site from
+    // the browser's point of view - Lax is enough, and avoids SameSite=None cookies
+    // getting silently dropped by third-party-cookie blocking (e.g. Incognito).
+    sameSite: 'lax',
     path: '/api/auth',
     expires: refreshExpiryDate(),
   };
