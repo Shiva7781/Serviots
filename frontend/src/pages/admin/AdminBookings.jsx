@@ -8,12 +8,20 @@ export default function AdminBookings() {
   const [filters, setFilters] = useState({ status: 'pending', date: '', space: '' });
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ items: [], totalPages: 1 });
+  const [spaces, setSpaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [actionError, setActionError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [rejectingId, setRejectingId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+
+  useEffect(() => {
+    api
+      .get('/admin/spaces', { params: { limit: 100 } })
+      .then((res) => setSpaces(res.data.items))
+      .catch(() => {});
+  }, []);
 
   const load = () => {
     setLoading(true);
@@ -89,6 +97,14 @@ export default function AdminBookings() {
             onChange={(e) => updateFilter('date', e.target.value)}
           />
         </div>
+        <select value={filters.space} onChange={(e) => updateFilter('space', e.target.value)}>
+          <option value="">All spaces</option>
+          {spaces.map((s) => (
+            <option key={s._id} value={s._id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {loading && <p>Loading…</p>}
