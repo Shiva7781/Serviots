@@ -36,7 +36,10 @@ async function approve(req, res) {
   booking.status = 'approved';
   booking.createdBy = req.user.id;
   await booking.save();
-  await notifyBookingStatusChange(booking, 'pending');
+  // Not awaited: SMTP delivery can take tens of seconds (observed with real
+  // Gmail SMTP), and that latency shouldn't block the booking response -
+  // notifyBookingStatusChange already catches its own errors internally.
+  notifyBookingStatusChange(booking, 'pending');
 
   // Defensive net: slot creation already blocks overlapping pending bookings,
   // so this should normally match nothing - kept to guarantee the invariant.
@@ -55,7 +58,7 @@ async function approve(req, res) {
       other.reason = 'Auto-rejected: overlapping slot was approved for another booking';
       await other.save();
       await releaseSlots(other._id);
-      await notifyBookingStatusChange(other, 'pending');
+      notifyBookingStatusChange(other, 'pending');
       autoRejected.push(other._id);
     }
   }
@@ -75,7 +78,7 @@ async function reject(req, res) {
   booking.createdBy = req.user.id;
   await booking.save();
   await releaseSlots(booking._id);
-  await notifyBookingStatusChange(booking, 'pending');
+  notifyBookingStatusChange(booking, 'pending');
 
   res.json({ booking });
 }

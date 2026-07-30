@@ -7,13 +7,17 @@ const STATUS_LABEL = {
   cancelled: 'Cancelled',
 };
 
+// Called fire-and-forget from the controllers (SMTP latency shouldn't block
+// the booking response), so nothing in here may throw - an unhandled
+// rejection on an un-awaited call would crash the process.
 async function notifyBookingStatusChange(booking, previousStatus) {
-  await booking.populate('user', 'name email');
-  await booking.populate('space', 'name');
-  if (!booking.user?.email) return;
+  try {
+    await booking.populate('user', 'name email');
+    await booking.populate('space', 'name');
+    if (!booking.user?.email) return;
 
-  const subject = 'Booking Status Updated';
-  const text = `Hi ${booking.user.name},
+    const subject = 'Booking Status Updated';
+    const text = `Hi ${booking.user.name},
 
 Your booking for ${booking.space?.name || 'a space'} on ${booking.date} (${booking.startTime}-${booking.endTime}) has been updated.
 
@@ -25,7 +29,6 @@ Thank you for choosing us!
 Regards,
 Booking Team`;
 
-  try {
     await sendMail({ to: booking.user.email, subject, text });
   } catch (err) {
     console.error('[notificationService] failed to send booking status email:', err.message);

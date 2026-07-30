@@ -93,7 +93,7 @@ async function cancel(req, res) {
   booking.status = 'cancelled';
   await booking.save();
   await releaseSlots(booking._id);
-  await notifyBookingStatusChange(booking, previousStatus);
+  notifyBookingStatusChange(booking, previousStatus);
 
   res.json({ booking });
 }
