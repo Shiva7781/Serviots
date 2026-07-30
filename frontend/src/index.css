@@ -232,6 +232,23 @@ main {
 .input-icon .icon { position: absolute; left: 10px; color: var(--muted); pointer-events: none; }
 .input-icon input { padding-left: 32px; }
 
+.password-input-wrap { position: relative; display: flex; align-items: center; }
+.password-input-wrap input { padding-right: 36px; width: 100%; }
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.password-toggle:hover { color: var(--text-h); }
+
 /* ---------- space cards / grid ---------- */
 .space-grid {
   display: grid;

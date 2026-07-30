@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Icon from '../components/Icon';
+import PasswordInput from '../components/PasswordInput';
 
 export default function RegisterPage() {
   const { register } = useAuth();
@@ -42,8 +43,7 @@ export default function RegisterPage() {
         </label>
         <label>
           Password
-          <input
-            type="password"
+          <PasswordInput
             required
             minLength={6}
             value={form.password}
