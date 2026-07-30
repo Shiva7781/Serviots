@@ -17,9 +17,8 @@ member, and managing spaces/bookings as an admin.
 - **Database:** MongoDB (local at `mongodb://localhost:27017/Serviots` for
   dev; MongoDB Atlas free M0 cluster in production).
 
-> This README covers the **mandatory** scope plus the email/notification and
-> deployed-link bonus items. Remaining bonus items (Docker, Swagger) are not
-> included yet.
+> This README covers the **mandatory** scope plus the email/notification,
+> deployed-link, and Docker bonus items. Swagger is not included yet.
 
 ---
 
@@ -27,11 +26,41 @@ member, and managing spaces/bookings as an admin.
 
 ```
 Serviots/
-  backend/     Express API (src/models, controllers, routes, middleware, ...)
-  frontend/    React app (src/pages, components, context, api)
+  backend/             Express API (src/models, controllers, routes, middleware, ...)
+  backend/Dockerfile
+  frontend/            React app (src/pages, components, context, api)
+  frontend/Dockerfile
+  docker-compose.yml   one-command local run (mongo + backend + frontend)
+  render.yaml          Render blueprint for the deployed backend
 ```
 
-## Prerequisites
+## Quick start with Docker (one command, no manual setup)
+
+```bash
+docker compose up --build
+```
+
+This builds and starts all three services — MongoDB, the backend (with the
+seed script run automatically), and the frontend — wired together on an
+internal Docker network. No local Node.js or MongoDB install needed.
+
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:5000/api
+- Seeded accounts: `admin@serviots.com` / `Admin@123` and
+  `member@serviots.com` / `Member@123` (same as below)
+
+Source is bind-mounted into both containers and both run their normal `dev`
+script (nodemon / Vite), so edits on the host hot-reload inside the
+containers — this is a dev setup, not a production image. Mongo data
+persists in a named volume (`serviots_mongo_data`) across `docker compose
+down` / `up`; use `docker compose down -v` to wipe it. The dev JWT secrets
+and Mongo credentials in `docker-compose.yml` are placeholders for local use
+only, not meant for production (see [Deployment](#deployment-free-tier) for
+how the real deployment handles secrets).
+
+If you'd rather run things natively instead, follow the manual steps below.
+
+## Prerequisites (manual setup)
 
 - Node.js 18+
 - A running local MongoDB at `mongodb://localhost:27017/` (no auth) — the app
@@ -669,5 +698,4 @@ a `baseUrl` variable and login requests that auto-capture `memberToken` /
 
 ## What's not included yet (optional/bonus — pending your go-ahead)
 
-- Docker / `docker-compose.yml`
 - Swagger (Postman collection is included above)

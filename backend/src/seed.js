@@ -2,17 +2,9 @@ require('dotenv').config();
 const connectDB = require('./config/db');
 const User = require('./models/User');
 const Space = require('./models/Space');
-const Booking = require('./models/Booking');
-const SlotReservation = require('./models/SlotReservation');
 
 async function seed() {
   await connectDB();
-
-  await Promise.all([
-    Booking.deleteMany({}),
-    SlotReservation.deleteMany({}),
-    Space.deleteMany({}),
-  ]);
 
   const adminEmail = 'admin@serviots.com';
   let admin = await User.findOne({ email: adminEmail });
@@ -40,59 +32,63 @@ async function seed() {
     console.log(`[seed] created member user: ${memberEmail} / Member@123`);
   }
 
-  const spaces = await Space.insertMany([
-    {
-      name: 'Hot Desk A1',
-      type: 'desk',
-      capacity: 1,
-      amenities: ['power outlet', 'monitor', 'ergonomic chair'],
-      description: 'Quiet corner hot desk near the window.',
-      location: 'Floor 1',
-      pricePerHour: 5,
-    },
-    {
-      name: 'Hot Desk A2',
-      type: 'desk',
-      capacity: 1,
-      amenities: ['power outlet', 'monitor'],
-      location: 'Floor 1',
-      pricePerHour: 5,
-    },
-    {
-      name: 'Focus Pod B1',
-      type: 'desk',
-      capacity: 1,
-      amenities: ['power outlet', 'soundproof'],
-      location: 'Floor 2',
-      pricePerHour: 8,
-    },
-    {
-      name: 'Meeting Room "Everest"',
-      type: 'meeting_room',
-      capacity: 8,
-      amenities: ['projector', 'whiteboard', 'video conferencing'],
-      location: 'Floor 3',
-      pricePerHour: 40,
-    },
-    {
-      name: 'Meeting Room "K2"',
-      type: 'meeting_room',
-      capacity: 4,
-      amenities: ['whiteboard', 'TV screen'],
-      location: 'Floor 3',
-      pricePerHour: 25,
-    },
-    {
-      name: 'Boardroom "Everest Peak"',
-      type: 'meeting_room',
-      capacity: 12,
-      amenities: ['projector', 'video conferencing', 'catering available'],
-      location: 'Floor 4',
-      pricePerHour: 60,
-    },
-  ]);
+  if ((await Space.countDocuments()) === 0) {
+    const spaces = await Space.insertMany([
+      {
+        name: 'Hot Desk A1',
+        type: 'desk',
+        capacity: 1,
+        amenities: ['power outlet', 'monitor', 'ergonomic chair'],
+        description: 'Quiet corner hot desk near the window.',
+        location: 'Floor 1',
+        pricePerHour: 5,
+      },
+      {
+        name: 'Hot Desk A2',
+        type: 'desk',
+        capacity: 1,
+        amenities: ['power outlet', 'monitor'],
+        location: 'Floor 1',
+        pricePerHour: 5,
+      },
+      {
+        name: 'Focus Pod B1',
+        type: 'desk',
+        capacity: 1,
+        amenities: ['power outlet', 'soundproof'],
+        location: 'Floor 2',
+        pricePerHour: 8,
+      },
+      {
+        name: 'Meeting Room "Everest"',
+        type: 'meeting_room',
+        capacity: 8,
+        amenities: ['projector', 'whiteboard', 'video conferencing'],
+        location: 'Floor 3',
+        pricePerHour: 40,
+      },
+      {
+        name: 'Meeting Room "K2"',
+        type: 'meeting_room',
+        capacity: 4,
+        amenities: ['whiteboard', 'TV screen'],
+        location: 'Floor 3',
+        pricePerHour: 25,
+      },
+      {
+        name: 'Boardroom "Everest Peak"',
+        type: 'meeting_room',
+        capacity: 12,
+        amenities: ['projector', 'video conferencing', 'catering available'],
+        location: 'Floor 4',
+        pricePerHour: 60,
+      },
+    ]);
+    console.log(`[seed] created ${spaces.length} spaces`);
+  } else {
+    console.log('[seed] spaces already exist, skipping');
+  }
 
-  console.log(`[seed] created ${spaces.length} spaces`);
   console.log('[seed] done');
   process.exit(0);
 }
