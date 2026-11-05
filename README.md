@@ -17,8 +17,8 @@ member, and managing spaces/bookings as an admin.
 - **Database:** MongoDB (local at `mongodb://localhost:27017/Serviots` for
   dev; MongoDB Atlas free M0 cluster in production).
 
-> This README covers the **mandatory** scope plus the email/notification,
-> deployed-link, and Docker bonus items. Swagger is not included yet.
+> Includes email notifications, a live deployment, and a one-command Docker
+> setup. Swagger docs are on the roadmap (a Postman collection is included).
 
 ---
 
@@ -184,7 +184,7 @@ push), and re-run `vercel --prod` from `frontend/` for the frontend.
 - Role-based authorization is enforced with `authenticate()` +
   `authorize('member'|'admin')` middleware on every protected route.
 
-### Concurrency-safe booking (the core requirement)
+### Concurrency-safe booking (no double-booking)
 
 MongoDB here runs as a **standalone instance** (not a replica set), so
 multi-document ACID transactions aren't available. Instead of relying on
@@ -723,6 +723,6 @@ a `baseUrl` variable and login requests that auto-capture `memberToken` /
 - Concurrency race: 8 simultaneous `POST /api/bookings` for the same
   space/date/time → exactly 1 `201`, 7 `409`, zero orphaned data.
 
-## What's not included yet (optional/bonus — pending your go-ahead)
+## Roadmap
 
 - Swagger (Postman collection is included above)
