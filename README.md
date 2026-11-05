@@ -1,5 +1,7 @@
 # Serviots — Co-working Space Desk & Room Booking System
 
+![Serviots — browse desks and meeting rooms](docs/screenshot.jpg)
+
 A full-stack app for browsing desks/meeting rooms, booking time slots as a
 member, and managing spaces/bookings as an admin.
 
