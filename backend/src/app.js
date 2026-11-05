@@ -12,6 +12,7 @@ const spaceRoutes = require('./routes/spaceRoutes');
 const bookingRoutes = require('./routes/bookingRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { isConnected } = require('./config/db');
 
 const app = express();
 
@@ -30,7 +31,17 @@ app.use(cookieParser());
 app.use(mongoSanitize());
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date().toISOString() }));
+app.get('/api/health', (req, res) => {
+  const db = isConnected() ? 'connected' : 'disconnected';
+  res.status(db === 'connected' ? 200 : 503).json({ status: db === 'connected' ? 'ok' : 'degraded', db, time: new Date().toISOString() });
+});
+
+// Fail fast with a clear error while the database is unreachable, instead of
+// letting requests hang on Mongoose's command buffer.
+app.use('/api', (req, res, next) => {
+  if (isConnected()) return next();
+  return res.status(503).json({ message: 'Service temporarily unavailable: database not connected. Please retry shortly.' });
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/spaces', spaceRoutes);
